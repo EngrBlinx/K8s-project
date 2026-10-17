@@ -3,7 +3,7 @@ terraform {
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
-      version = " ~> 3.0.2"
+      version = " ~> 4.0"
     }
   }
   required_version = ">= 1.1.0"
@@ -16,7 +16,7 @@ provider "azurerm" {
 
 resource "azurerm_resource_group" "rg" {
   name     = var.resource_group_name
-  location = "westus2"
+  location = "eastus2"
 
   tags = {
     Environment = "Personal project"
@@ -28,19 +28,23 @@ locals {
   virtual_machines = {
     jumpbox = {
       description = "Administration host"
-      size        = "Standard_B1ls"
+      size        = "Standard_F1als_v7"
+      spot        = false
     }
     server = {
       description = "Kubernetes server"
-      size        = "Standard_B1ms"
+      size        = "Standard_F1ads_v7"
+      spot        = false
     }
     node-0 = {
       description = "Kubernetes worker node"
-      size        = "Standard_B1ms"
+      size        = "Standard_F1ads_v7"
+      spot        = true
     }
     node-1 = {
       description = "Kubernetes worker node"
-      size        = "Standard_B1ms"
+      size        = "Standard_F1ads_v7"
+      spot        = true
     }
   }
 }
@@ -110,6 +114,9 @@ resource "azurerm_linux_virtual_machine" "vm" {
   resource_group_name             = azurerm_resource_group.rg.name
   location                        = azurerm_resource_group.rg.location
   size                            = each.value.size
+  priority                        = each.value.spot ? "Spot" : "Regular"
+  eviction_policy                 = each.value.spot ? "Deallocate" : null
+  max_bid_price                   = -1
   admin_username                  = var.admin_username
   disable_password_authentication = true
   network_interface_ids           = [azurerm_network_interface.vm[each.key].id]
@@ -128,9 +135,9 @@ resource "azurerm_linux_virtual_machine" "vm" {
   }
 
   source_image_reference {
-    publisher = "Canonical"
-    offer     = "0001-com-ubuntu-server-jammy"
-    sku       = "22_04-lts-gen2"
+    publisher = "Debian"
+    offer     = "debian-12"
+    sku       = "12-gen2"
     version   = "latest"
   }
 
