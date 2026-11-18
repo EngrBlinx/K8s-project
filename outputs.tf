@@ -2,9 +2,9 @@ output "resource_group_id" {
   value = azurerm_resource_group.rg.id
 }
 
-output "jumpbox_public_ip" {
-  description = "Public IP address for SSH access to the jumpbox."
-  value       = azurerm_public_ip.jumpbox.ip_address
+output "server_public_ip" {
+  description = "Public IP address for SSH access to the server."
+  value       = azurerm_public_ip.server.ip_address
 }
 
 output "vm_private_ips" {

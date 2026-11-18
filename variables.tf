@@ -1,5 +1,5 @@
 variable "resource_group_name" {
-  default = "k8s-the-hard-way"
+  default = "uMed-rg"
 }
 
 variable "admin_username" {

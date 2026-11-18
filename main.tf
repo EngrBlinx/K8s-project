@@ -19,18 +19,18 @@ resource "azurerm_resource_group" "rg" {
   location = "eastus2"
 
   tags = {
-    Environment = "Personal project"
+    Environment = "production"
     Team        = "DevOps"
   }
 }
 
 locals {
   virtual_machines = {
-    jumpbox = {
-      description = "Administration host"
-      size        = "Standard_F1als_v7"
-      spot        = false
-    }
+    # jumpbox = {
+    #   description = "Administration host"
+    #   size        = "Standard_F1als_v7"
+    #   spot        = false
+    # }
     server = {
       description = "Kubernetes server"
       size        = "Standard_F1ads_v7"
@@ -86,8 +86,8 @@ resource "azurerm_subnet_network_security_group_association" "vms" {
   network_security_group_id = azurerm_network_security_group.vms.id
 }
 
-resource "azurerm_public_ip" "jumpbox" {
-  name                = "jumpbox-ip"
+resource "azurerm_public_ip" "server" {
+  name                = "server-ip"
   location            = azurerm_resource_group.rg.location
   resource_group_name = azurerm_resource_group.rg.name
   allocation_method   = "Static"
@@ -104,7 +104,7 @@ resource "azurerm_network_interface" "vm" {
     name                          = "internal"
     subnet_id                     = azurerm_subnet.subnet.id
     private_ip_address_allocation = "Dynamic"
-    public_ip_address_id          = each.key == "jumpbox" ? azurerm_public_ip.jumpbox.id : null
+    public_ip_address_id          = each.key == "server" ? azurerm_public_ip.server.id : null
   }
 }
 
