@@ -17,20 +17,23 @@
         regexp: '^([^#].*?\sswap\s+sw\s+.*)$'
         replace: '# \1'
 
-    - name: Persist overlay and br_netfilter kernel modules
+    - name: Persist required kernel modules
       ansible.builtin.copy:
         dest: /etc/modules-load.d/k8s.conf
         mode: "0644"
         content: |
           overlay
           br_netfilter
+          nf_conntrack
 
-    - name: Load kernel modules immediately
-      ansible.builtin.command: "modprobe {{ item }}"
+    - name: Load required kernel modules immediately
+      ansible.builtin.modprobe:
+        name: "{{ item }}"
+        state: present
       loop:
         - overlay
         - br_netfilter
-      changed_when: false
+        - nf_conntrack
 
     - name: Configure sysctl networking parameters for Kubernetes
       ansible.builtin.copy:
@@ -50,6 +53,8 @@
           - ca-certificates
           - curl
           - gpg
+          - iptables
+          - conntrack
         state: present
         update_cache: true
 
@@ -144,6 +149,31 @@
         --ignore-preflight-errors=NumCPU
       when: not k8s_admin_conf.stat.exists
 
+    - name: Tune etcd Raft intervals and control-plane probe timeouts
+      ansible.builtin.shell: |
+        python3 -c '
+        nl = chr(10)
+        changed = False
+        for p in ["/etc/kubernetes/manifests/kube-apiserver.yaml", "/etc/kubernetes/manifests/etcd.yaml"]:
+            orig = open(p).read()
+            s = orig.replace("timeoutSeconds: 15", "timeoutSeconds: 30")
+            if "etcd.yaml" in p and "--election-timeout" not in s:
+                s = s.replace("    - etcd" + nl, "    - etcd" + nl + "    - --heartbeat-interval=500" + nl + "    - --election-timeout=5000" + nl)
+            if s != orig:
+                open(p, "w").write(s)
+                changed = True
+        print("CHANGED" if changed else "UNCHANGED")
+        '
+      args:
+        executable: /bin/bash
+      register: etcd_tune
+      changed_when: "'CHANGED' in etcd_tune.stdout"
+
+    - name: Allow kubelet time to trigger static pod reload after manifest edit
+      ansible.builtin.pause:
+        seconds: 10
+      when: etcd_tune.changed
+
     - name: Create .kube directory for ansible_user
       ansible.builtin.file:
         path: "/home/{{ ansible_user }}/.kube"
@@ -161,16 +191,33 @@
         group: "{{ ansible_user }}"
         mode: "0600"
 
+    - name: Wait for kube-apiserver to be ready after tuning
+      become: true
+      become_user: "{{ ansible_user }}"
+      ansible.builtin.command: kubectl get --raw=/readyz
+      register: api_ready
+      retries: 15
+      delay: 5
+      until: api_ready.rc == 0
+      changed_when: false
+
     - name: Install Flannel Pod Network CNI
       become: true
       become_user: "{{ ansible_user }}"
       ansible.builtin.command: >
         kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
+      register: flannel_apply
+      retries: 5
+      delay: 10
+      until: flannel_apply.rc == 0
       changed_when: false
 
     - name: Generate kubeadm join command for workers
       ansible.builtin.command: kubeadm token create --print-join-command
       register: kubeadm_join_cmd
+      retries: 5
+      delay: 10
+      until: kubeadm_join_cmd.rc == 0
       changed_when: false
 
 - name: 3. Join Worker Nodes to Cluster

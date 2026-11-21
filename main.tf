@@ -12,6 +12,7 @@ terraform {
 #Configure the specified provider
 provider "azurerm" {
   features {}
+  subscription_id = "cc4df6c9-1125-4c48-a127-6a6e0dec0265"
 }
 
 resource "azurerm_resource_group" "rg" {
@@ -33,7 +34,7 @@ locals {
     # }
     server = {
       description = "Kubernetes server"
-      size        = "Standard_F1ads_v7"
+      size        = "Standard_F2alds_v7"
       spot        = false
     }
     node-0 = {
@@ -130,14 +131,14 @@ resource "azurerm_linux_virtual_machine" "vm" {
   os_disk {
     name                 = "${each.key}-os"
     caching              = "ReadWrite"
-    storage_account_type = "Standard_LRS"
-    disk_size_gb         = 30
+    storage_account_type = each.key == "server" ? "Premium_LRS" : "StandardSSD_LRS"
+    disk_size_gb         = each.key == "server" ? 128 : 30
   }
 
   source_image_reference {
-    publisher = "Debian"
-    offer     = "debian-12"
-    sku       = "12-gen2"
+    publisher = "Canonical"
+    offer     = "0001-com-ubuntu-server-jammy"
+    sku       = "22_04-lts-gen2"
     version   = "latest"
   }
 
